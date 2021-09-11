@@ -11,13 +11,15 @@ from conversions import convert
 from uniform_diffuser import *
 import plots
 
-
+st.set_page_config(layout="wide")
 st.title('BUBX version 0.0')
 st.write("An application for solving air demands for submerged manifolds")
 
 system_geometry = uniform_diffuser()
 
-with st.form(key='Flow Range Plot Parameters'):
+col4, col5 = st.beta_columns((1,2))
+
+with col4.form(key='Flow Range Plot Parameters'):
     
     min_depth = st.number_input('Minimum Water Depth (ft)',value = 30.)
     max_depth = st.number_input('Maximum Water Depth (ft)',value = 50.)
@@ -43,7 +45,7 @@ with st.form(key='Flow Range Plot Parameters'):
     # st.form_submit_button returns True upon form submit
     if fr_submit_button:
         
-        st.write(plots.plot_flow_vs_depth(system_geometry,
+        col5.write(plots.plot_flow_vs_depth(system_geometry,
                        depth_lims_m,
                        air_pressures_Pa,
                        air_temp=0,

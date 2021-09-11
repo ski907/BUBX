@@ -1,4 +1,5 @@
-from solver import get_just_airflow
+from solver import downstream_solve
+#from solver import get_just_airflow
 import pandas as pd
 import numpy as np
 import altair as alt
@@ -7,6 +8,9 @@ from physics import air
 from conversions import convert
 
 from geometry.segments import generate_equal_spaced_uniform
+from geometry.parse_results import parse_results
+
+import copy
 
 def plot_flow_vs_depth(system_geometry,
                        depth_lims: tuple,
@@ -27,11 +31,19 @@ def plot_flow_vs_depth(system_geometry,
     source1 = pd.DataFrame(columns = column_names, dtype=object)
 
     for air_pressure in air_pressures:    
-        air_flows_mass = [get_just_airflow(system_geometry = system_geometry, 
-                         air_pressure =  air_pressure, 
-                         water_pressure = convert.pressure_to_absolute(convert.H_m_to_Pa(depth)),
-                         starting_mdot= 0.1, 
-                         air_temp = air_temp) for depth in depths]
+#        air_flows_mass = [get_just_airflow(system_geometry = system_geometry, 
+#                         air_pressure =  air_pressure, 
+#                         water_pressure = convert.pressure_to_absolute(convert.H_m_to_Pa(depth)),
+#                         starting_mdot= 0.1, 
+#                         air_temp = air_temp) for depth in depths]
+        
+        solved_geometries = [copy.deepcopy(downstream_solve(system_geometry = system_geometry, 
+                     air_pressure =  air_pressure, 
+                     water_pressure = convert.pressure_to_absolute(convert.H_m_to_Pa(depth)),
+                     starting_mdot= 0.1, 
+                     air_temp = air_temp)) for depth in depths]
+    
+        air_flows_mass = [parse_results(geom).total_mdot() for geom in solved_geometries]
         
         atm_pressure = convert.pressure_to_absolute(0)
         rho_air = air.rho_air(atm_pressure, T=convert.F_to_C(68)) #68F is Standard Temperature in SCFM in north america

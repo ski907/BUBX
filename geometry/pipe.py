@@ -119,7 +119,7 @@ class Pipe:
         return f'Pipe with ' \
                 f'length = {self.length}, ' \
                 f'diameter = {self.diameter}, ' \
-                f'roughness = {self.roughness}'
+                f'roughness = {self.epsilon}'
     
     @property            
     def f_BUB300_legacy(self):

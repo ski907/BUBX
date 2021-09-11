@@ -67,5 +67,44 @@ def generate_point(segment_length: float,
 
     return Segment(features)
 
+def generate_repeating_segments(segment_length: float, 
+                                pipe_roughness: float,
+                                pipe_diameter: float,
+                                number_of_orifices: int,
+                                orifice_diameter: float,
+                                number_of_repeats: int,
+                                connector_length: float,
+                                connector_roughness: float,
+                                connector_diameter: float):
+    
+    features = []
+    
+    for __ in range(number_of_repeats):
+        
+        features.extend(generate_equal_spaced_uniform(segment_length,
+                                      pipe_roughness,
+                                      pipe_diameter,
+                                      number_of_orifices,
+                                      orifice_diameter
+                                      ).features
+                                      )
+        
+        features.extend(generate_connector_segment(connector_length,
+                                               connector_roughness,
+                                               connector_diameter
+                                               ).features
+                                               )
+        
+    return Segment(features)   
 
-
+def add_supply_line(segment: Segment,
+                   supply_length: float,
+                   pipe_roughness: float,
+                   pipe_diameter: float,
+                   ):
+    
+    features = segment.features
+    features.insert(0,Pipe(supply_length, pipe_diameter, pipe_roughness))
+    
+    return Segment(features)
+    
