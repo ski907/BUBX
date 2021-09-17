@@ -12,10 +12,12 @@ from uniform_diffuser import *
 import plots
 
 st.set_page_config(layout="wide")
-st.title('BUBX version 0.0')
-st.write("An application for solving air demands for submerged manifolds")
+st.title('BUBX')
+st.write("Version 0.1 ~ An application for solving air demands for submerged manifolds")
 
 system_geometry = uniform_diffuser()
+
+st.write(plots.plot_orifice_flows(system_geometry,units='English'))
 
 col4, col5 = st.beta_columns((1,2))
 

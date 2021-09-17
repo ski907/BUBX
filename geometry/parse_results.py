@@ -2,17 +2,36 @@ from geometry import Pipe
 from geometry import Orifice
 from physics import air
 
+import numpy as np
+
 from conversions import convert
+
+
 
 class parse_results:
     def __init__(self, system_geometry):
         self.system_geometry = system_geometry
+        self.atm_pressure = convert.pressure_to_absolute(0)
+        self.rho_air_standard = air.rho_air(self.atm_pressure, T=convert.F_to_C(68)) #68F is Standard Temperature in SCFM in north america
         
+    def orifice_positions(self):
+        offsets = [0]
+        for i,p in enumerate(self.system_geometry.pipes):
+            offsets.append(p.length + offsets[i]) 
+        return offsets[1:]
+        
+    
     def total_mdot(self):
         return sum([orifice.mdot for orifice in self.system_geometry.orifices])
     
     def orifice_mdots(self):
         return [o.mdot for o in self.system_geometry.orifices]
+    
+    def orifice_flows_SCMM(self):
+        return [convert.CMS_to_CMM(air.Q(mdot,self.rho_air_standard)) for mdot in self.orifice_mdots()]
+    
+    def orifice_flows_SCFM(self):
+        return [convert.CFS_to_CFM(convert.CMS_to_CFS(air.Q(mdot,self.rho_air_standard))) for mdot in self.orifice_mdots()]
     
     def pipe_velocities(self):
         return [p.velocity(p.Q) for p in self.system_geometry.pipes]
@@ -35,8 +54,12 @@ class parse_results:
         return self.pipe_total_pressure_drop()/convert.pressure_to_gauge(input_air_pressure)
     
     def coefficient_of_uniformity(self):
-        return self.system_geometry.orifices[-1].mdot\
-               /self.system_geometry.orifices[0].mdot
+        #modified from Haehnel 2016 to go to 1 when perfectly uniform
+        #it's just 1- CU from Haehnel
+        return 1 - (self.system_geometry.orifices[0].mdot - self.system_geometry.orifices[-1].mdot)/self.mean_orifice_mass_flow()
+               
+    def mean_orifice_mass_flow(self):
+        return np.mean([o.mdot for o in self.system_geometry.orifices])
         
     def pipe_mach_numbers(self):
         return [p.mach_number for p in self.system_geometry.pipes]
@@ -45,9 +68,23 @@ class parse_results:
         return [p.Re for p in self.system_geometry.pipes]
     
     def airflow_per_unit_length(self):
-        mdot_per_unit_length =  self.total_mdot() / sum([p.length for p in self.system_geometry.pipes])
+        mdot_per_unit_length =  self.total_mdot() / sum([p.length for p in self.system_geometry.pipes[1:]])
     
-        atm_pressure = convert.pressure_to_absolute(0)
-        rho_air = air.rho_air(atm_pressure, T=convert.F_to_C(68)) #68F is Standard Temperature in SCFM in north america
+        return convert.CMS_to_CMM(air.Q(mdot_per_unit_length,self.rho_air_standard))
+    
+    def horizontal_surface_vel_haehnel2016(self):
+        water_depth = convert.Pa_to_H_m(
+                                        convert.pressure_to_gauge(
+                                        self.system_geometry.orifices[0].downstream_pressure)
+                                        )
+        Qa = self.airflow_per_unit_length()
         
-        return convert.CMS_to_CMM(air.Q(mdot_per_unit_length,rho_air))
+        return ( (351+25.47*water_depth) / 10) * (Qa ** 0.4223)
+    
+    def orifice_to_diffuser_area_ratio(self):
+        total_orifice_area = sum([o.area for o in self.system_geometry.orifices])
+        diffuser_pipe_area = self.system_geometry.pipes[-1].area
+        ratio = total_orifice_area / diffuser_pipe_area
+        
+        return ratio
+            

@@ -1,5 +1,5 @@
 from solver import downstream_solve
-#from solver import get_just_airflow
+
 import pandas as pd
 import numpy as np
 import altair as alt
@@ -84,6 +84,25 @@ def plot_flow_vs_depth(system_geometry,
                     labelFontSize=15,
                     titleFontSize=20
                     )
+
+def plot_orifice_flows(solved_geom,units):
+    
+    if units == 'SI':
+        flow_label = 'Orifice Airflow (SCMM)'
+        flows = parse_results(solved_geom).orifice_flows_SCMM()
+        offsets = parse_results(solved_geom).orifice_positions()
+    if units == 'English':
+        flow_label = 'Orifice Airflow (SCFM)'
+        flows = parse_results(solved_geom).orifice_flows_SCFM()
+        offsets = [convert.m_to_ft(offset) for offset in parse_results(solved_geom).orifice_positions()]
+    
+    
+    
+    data = pd.DataFrame({flow_label:flows, 'orifice offset':offsets})
+    
+    chart = alt.Chart(data).mark_point().encode(x = 'orifice offset', y=flow_label)
+    
+    return chart
     
     
 def main():

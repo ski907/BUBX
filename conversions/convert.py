@@ -24,6 +24,10 @@ def H_m_to_Pa(H):
     Pw = H*9806.38 #Pa, head must be in meters
     return Pw
 
+def Pa_to_H_m(Pw):
+    H = Pw/9806.38
+    return H
+
 def pressure_to_absolute(pressure, atm_pressure=101325):
     return pressure + atm_pressure
 
