@@ -89,18 +89,65 @@ def plot_orifice_flows(solved_geom,units):
     
     if units == 'SI':
         flow_label = 'Orifice Airflow (SCMM)'
+        orifice_label = 'orifice offset (m)'
         flows = parse_results(solved_geom).orifice_flows_SCMM()
         offsets = parse_results(solved_geom).orifice_positions()
     if units == 'English':
         flow_label = 'Orifice Airflow (SCFM)'
+        orifice_label = 'orifice offset (ft)'
         flows = parse_results(solved_geom).orifice_flows_SCFM()
         offsets = [convert.m_to_ft(offset) for offset in parse_results(solved_geom).orifice_positions()]
     
     
     
-    data = pd.DataFrame({flow_label:flows, 'orifice offset':offsets})
+    data = pd.DataFrame({flow_label:flows, orifice_label:offsets})
     
-    chart = alt.Chart(data).mark_point().encode(x = 'orifice offset', y=flow_label)
+    xdomain = [min(data[orifice_label])*.95,max(data[orifice_label])*1.05]
+    ydomain = [min(data[flow_label])*.95,max(data[flow_label])*1.05]
+    chart = alt.Chart(data).mark_circle(
+                color='red',
+                opacity=0.8
+            ).encode(
+            x = alt.X(orifice_label, scale=alt.Scale(domain=xdomain)), 
+            y= alt.Y(flow_label, scale=alt.Scale(domain=ydomain))
+            ).properties(title='Orifice Flows', height=800, width=1000
+            ).configure_axis(
+                    labelFontSize=20,
+                    titleFontSize=20
+                    )
+    
+    return chart
+
+def plot_horizontal_velocities(solved_geom,units):
+    
+    if units == 'SI':
+        vel_label = 'Horizontal Surface Velocity (m/s)'
+        orifice_label = 'orifice offset (m)'
+        h_velocities = parse_results(solved_geom).horizontal_surface_vel_haehnel2016_at_orifices()
+        offsets = parse_results(solved_geom).orifice_positions()
+    if units == 'English':
+        vel_label = 'Horizontal Surface Velocity (ft/s)'
+        orifice_label = 'orifice offset (ft)'
+        h_velocities = [convert.m_to_ft(hvel) for hvel in parse_results(solved_geom).horizontal_surface_vel_haehnel2016_at_orifices()]
+        offsets = [convert.m_to_ft(offset) for offset in parse_results(solved_geom).orifice_positions()]
+    
+    
+    
+    data = pd.DataFrame({vel_label:h_velocities, orifice_label:offsets})
+    
+    xdomain = [min(data[orifice_label])*.95,max(data[orifice_label])*1.05]
+    ydomain = [min(data[vel_label])*.95,max(data[vel_label])*1.05]
+    chart = alt.Chart(data).mark_circle(
+                color='red',
+                opacity=0.8
+            ).encode(
+            x = alt.X(orifice_label, scale=alt.Scale(domain=xdomain)),
+            y= alt.Y(vel_label, scale=alt.Scale(domain=ydomain))
+            ).properties(title='Surface Velocities', height=800, width=1000
+            ).configure_axis(
+                    labelFontSize=20,
+                    titleFontSize=20
+                    )
     
     return chart
     

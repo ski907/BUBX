@@ -128,7 +128,7 @@ def uniform_diffuser():
     col4.write('Airflow Per Unit Length: {:,.2f} SCMM/m'.format(parse_results(solved_geom).airflow_per_unit_length()))
     
     col4.write('Estimated Horizontal Surface Velocity (Haehnel 2016): {:,.2f} cm/s'.format(parse_results(solved_geom).horizontal_surface_vel_haehnel2016()))
-    col4.write('Estimated Horizontal Surface Velocity (Haehnel 2016): {:,.2f} ft/s'.format(convert.m_to_ft(parse_results(solved_geom).horizontal_surface_vel_haehnel2016())/100))
+    col4.write('Estimated Horizontal Surface Velocity (Haehnel 2016): {:,.2f} ft/s'.format(convert.m_to_ft(parse_results(solved_geom).horizontal_surface_vel_haehnel2016())))
     
     coeff_uniformity = parse_results(solved_geom).coefficient_of_uniformity()
     col4.write('Coefficient of Uniformity: {:,.2f}'.format(coeff_uniformity))

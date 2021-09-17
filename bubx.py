@@ -17,7 +17,10 @@ st.write("Version 0.1 ~ An application for solving air demands for submerged man
 
 system_geometry = uniform_diffuser()
 
-st.write(plots.plot_orifice_flows(system_geometry,units='English'))
+orifice_plot_units = st.radio('Orifice Plot Units:', ('SI','English'))
+st.write(plots.plot_orifice_flows(system_geometry,units=orifice_plot_units))
+
+st.write(plots.plot_horizontal_velocities(system_geometry,units=orifice_plot_units))
 
 col4, col5 = st.beta_columns((1,2))
 

@@ -33,6 +33,13 @@ class parse_results:
     def orifice_flows_SCFM(self):
         return [convert.CFS_to_CFM(convert.CMS_to_CFS(air.Q(mdot,self.rho_air_standard))) for mdot in self.orifice_mdots()]
     
+    def orifice_flows_SCMM_per_unit_length(self):
+        pipe_lengths = [p.length for p in self.system_geometry.pipes][1:]
+        spacings = [(a + b) / 2 for a, b in zip(pipe_lengths[:], pipe_lengths[1:])]
+        spacings.insert(0,pipe_lengths[0])
+        spacings.append(pipe_lengths[-1])
+        return [convert.CMS_to_CMM(air.Q(mdot,self.rho_air_standard))/spacings[i] for i, mdot in enumerate(self.orifice_mdots())]
+    
     def pipe_velocities(self):
         return [p.velocity(p.Q) for p in self.system_geometry.pipes]
     
@@ -79,7 +86,17 @@ class parse_results:
                                         )
         Qa = self.airflow_per_unit_length()
         
-        return ( (351+25.47*water_depth) / 10) * (Qa ** 0.4223)
+        return ( (351+25.47*water_depth) / 1000) * (Qa ** 0.4223)
+
+    def horizontal_surface_vel_haehnel2016_at_orifices(self):
+        water_depth = convert.Pa_to_H_m(
+                                        convert.pressure_to_gauge(
+                                        self.system_geometry.orifices[0].downstream_pressure)
+                                        )
+        Qa_at_orifices = self.orifice_flows_SCMM_per_unit_length()
+        
+        return [( (351+25.47*water_depth) / 1000) * (Qa ** 0.4223) for Qa in Qa_at_orifices]   
+    
     
     def orifice_to_diffuser_area_ratio(self):
         total_orifice_area = sum([o.area for o in self.system_geometry.orifices])
