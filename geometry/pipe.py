@@ -16,6 +16,9 @@ class Pipe:
         self.F_METHOD = 'clamond'
         self.air_temp = 0
         self.mdot = 0
+        
+        self.elevation_above_datum = 0
+        self.datum = 0
         #self.F_METHOD = 'BUB300 Legacy'
     
   

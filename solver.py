@@ -13,74 +13,16 @@ from geometry.segments import generate_equal_spaced_uniform
 from geometry.segments import generate_point
 from geometry.segments import add_supply_line
 from geometry.segments import generate_repeating_segments
+from geometry.segments import set_orifice_elevations_on_profile
 from geometry.parse_results import parse_results
 
-
-#def mdot_calc(starting_mdot, air_pressure, water_pressure, system_geometry, air_temp, mode='solve'):    
-#    '''Function to be optimized with scipy solvers 
-#    given mdot input, returns residual mdot at downstream end
-#    The system is solved when the residual mdot returned in close to zero'''
-#    
-#    mdot_calc = abs(starting_mdot)
-#        
-#    air_pressure_calc = air_pressure
-#
-#    
-#    for feature in system_geometry.features:
-#        
-#        if isinstance(feature, Orifice):
-#            
-#            feature.upstream_pressure = air_pressure_calc
-#            feature.downstream_pressure = water_pressure
-#                        
-#            mdot_calc -= feature.mdot
-#            
-#        
-#        if isinstance(feature, Pipe):
-#            
-#            feature.rho_air = air.rho_air(air_pressure_calc, air_temp)
-#            feature.Q = air.Q(mdot_calc, feature.rho_air)
-#                        
-#            air_pressure_calc -= feature.pressure_drop
-#            
-#            if air_pressure_calc < 0:
-#                mdot_calc = 1000
-#    
-#    if mode == 'solve':        
-#        return abs(mdot_calc)
-#    elif mode == 'return system geometry':
-#        return system_geometry
-#    
-#    
-#def scipy_minimize_solve(segment, air_pressure, water_pressure, starting_mdot, air_temp):
-#    '''This approach is not robust yet- in test cases it converges on 
-#    incorrect values i.e. close to zero, or very large values'''
-#    
-#    
-#    scipy_results = minimize(mdot_calc,
-#                             starting_mdot,
-#                             args=(air_pressure, water_pressure, segment, air_temp),
-#                             method='Nelder-Mead', 
-#                             tol=1e-4)
-#    
-#    #print(scipy_results)
-#    print('scipy-minimize Converged on {} kg/s after {} iterations'.format(abs(scipy_results.x[0]), scipy_results.nit))
-#    
-#    segment = mdot_calc(abs(scipy_results.x[0]), 
-#                         air_pressure, 
-#                         water_pressure,
-#                         segment,
-#                         air_temp, 
-#                         mode='return system geometry')
-#    
-#    return segment
-    
 
 def are_within_tolerance(a, b, tolerance=1e-10):
     return math.fabs(a-b) < tolerance
 
-def downstream_solve(system_geometry, air_pressure, water_pressure, starting_mdot, air_temp, verbose=False):
+def downstream_solve_OLD(system_geometry, air_pressure, water_pressure, starting_mdot, air_temp, verbose=False):
     #perhaps update this to bisection solver. It breaks for air pressures near the water pressure
+    #THIS HAS BEEN UPDATED
     if water_pressure > air_pressure:
         sys.exit('Water Pressure Exceeds Internal Air Pressure')
     
@@ -106,7 +48,7 @@ def downstream_solve(system_geometry, air_pressure, water_pressure, starting_mdo
                 
                 feature.temp = air_temp
                 feature.upstream_pressure = air_pressure_calc
-                feature.downstream_pressure = water_pressure
+                feature.downstream_pressure = water_pressure - convert.H_m_to_Pa(feature.elevation_above_datum) 
                             
                 mdot_calc -= feature.mdot
                 
@@ -149,7 +91,7 @@ def downstream_solve(system_geometry, air_pressure, water_pressure, starting_mdo
             if verbose: print('Mass rate = {} kg/s'.format(starting_mdot))
             
         if iterations > max_iterations:
-            sys.exit('Max iterations of {} exceeded'.format(max_iterations))
+            sys.exit(f'Max iterations of {max_iterations} exceeded (in downstream_solve). Air Pressure = {air_pressure}, Water Pressure={water_pressure}')
             
         
     if verbose: print('Converged on {} kg/s after {} iterations'.format(starting_mdot, iterations))
@@ -164,32 +106,122 @@ def downstream_solve(system_geometry, air_pressure, water_pressure, starting_mdo
 
     return system_geometry
 
-def specify_airflow_get_pressure_OLD(system_geometry, airflow_SCMM, water_pressure, starting_mdot, air_temp):
-    #this works OK, but gets flaky when run at low airflows see new method which uses method of bisection
+def downstream_solve(system_geometry, air_pressure, water_pressure, starting_mdot, air_temp, verbose=False):
+    #WORK IN PROGRESS TO UPDATE TO BISECTION SOLVER
+    #if water_pressure > air_pressure:
+    #    sys.exit('Water Pressure Exceeds Internal Air Pressure')
+    starting_mdot = 0.000001
+    iterations = 0 #initialize
+    max_iterations = 1000
+    max_airflow_SCFM = 500000 #SCFM
+    tol = 0.0001
+    
     atm_pressure = convert.pressure_to_absolute(0)
     rho_air_standard = air.rho_air(atm_pressure, T=convert.F_to_C(68)) #68F is Standard Temperature in SCFM in north america
-    mdot_target = air.mdot(convert.CMM_to_CMS(airflow_SCMM), rho_air_standard)
+    mdot_max = air.mdot(convert.CFS_to_CMS(convert.CFM_to_CFS(max_airflow_SCFM)), rho_air_standard)
+
+    a = starting_mdot
+    b = mdot_max
     
-    air_pressure = water_pressure * 1.01
-    
-    iterations = 0
-    converged = False
-    while not converged:
-        iterations += 1
-        solved_geo  = downstream_solve(system_geometry, air_pressure, water_pressure, starting_mdot, air_temp)
-        mdot_calc = parse_results(solved_geo).total_mdot()
+    def f(mdot):
         
-        if are_within_tolerance(mdot_target, mdot_calc, tolerance = 0.000001):
-            converged = True
-        else:
-            if mdot_calc < mdot_target:
-                air_pressure += air_pressure * (mdot_target-mdot_calc)/mdot_target * 1
+        mdot_calc = mdot
+        air_pressure_calc = air_pressure
+        
+        for feature in system_geometry.features:
+            
+            if isinstance(feature, Orifice):
                 
-            elif mdot_calc > mdot_target:
-                air_pressure -= air_pressure * (mdot_calc-mdot_target)/mdot_target * 0.3
-        print(air_pressure)
-    print(iterations)            
-    return air_pressure
+                feature.temp = air_temp
+                feature.upstream_pressure = air_pressure_calc
+                feature.downstream_pressure = water_pressure - convert.H_m_to_Pa(feature.elevation_above_datum) 
+                
+                if feature.upstream_pressure < feature.downstream_pressure:
+                    mdot_calc = -777
+                    break
+                
+                mdot_calc -= feature.mdot 
+                
+                if mdot_calc < 0:
+                    mdot_calc = -999
+                    break
+                
+       
+            if isinstance(feature, Pipe):
+
+                if air_pressure_calc < water_pressure- convert.H_m_to_Pa(feature.elevation_above_datum) :
+                    if verbose: print('Inlet air pressure is below external hydrostatic water pressure')
+                    mdot_calc = 666
+                    break                
+
+
+                feature.air_temp = air_temp
+                method = "average pressure"
+                #method = "upstream pressure"
+                
+                
+                if method == "average pressure":
+                    feature.p1 = air_pressure_calc
+                    feature.mdot = mdot_calc
+                    air_pressure_calc -= feature.pressure_drop_average
+
+                if method == "upstream pressure":               
+                    feature.rho_air = air.rho_air(air_pressure_calc, air_temp)
+                    feature.Q = air.Q(mdot_calc, feature.rho_air)
+                    air_pressure_calc -= feature.pressure_drop
+                 
+                if air_pressure_calc < water_pressure- convert.H_m_to_Pa(feature.elevation_above_datum) :
+                    if verbose: print('Air pressure drop along pipe results in pressure below external hydrostatic water pressure')
+                    mdot_calc = 999 #make sign positive to pull air flow down
+                    break
+        
+        return mdot_calc
+
+    f_a = f(a)
+    f_b = f(b)
+    
+    
+    if np.sign(f_a) == np.sign(f_b):
+        raise Exception(
+         f'The scalars a and b do not bound a root. a={a} b={b} f(a)={f_a} f(b)={f_b}, air pressure={air_pressure}' )
+        
+    #basic bisection method solver
+    converged = False
+    while not converged:    
+        iterations += 1
+        
+        m = (a + b)/2
+        f_m = f(m)
+        
+        print(m)
+        if np.abs(f_m) < tol:
+            converged = True
+        elif np.sign(f_a) == np.sign(f_m):
+            #m is an improvement on a
+            a = m
+            f_a = f_m
+        elif np.sign(f_b) == np.sign(f_m):
+            #m is an improvement on b
+            b = m
+            f_b = f_m
+        
+        if iterations > max_iterations:
+            sys.exit(f'Max iterations of {max_iterations} exceeded (In downstream solve). It is likely that the orifice area is to great, or the pipe diameter is too small. f(m)={f_m}')
+    
+    converged_mdot = m        
+        
+    if verbose: print('Converged on {} kg/s after {} iterations'.format(converged_mdot, iterations))
+    
+    atm_pressure = convert.pressure_to_absolute(0)
+    rho_air = air.rho_air(atm_pressure, T=convert.F_to_C(68)) #68F is Standard Temperature in SCFM in north america
+    
+    if verbose: print('This is equal to {} CMS'.format(air.Q(converged_mdot,rho_air)))
+    if verbose: print('This is equal to {} CFM'.format(convert.CFS_to_CFM(convert.CMS_to_CFS(air.Q(converged_mdot,rho_air)))))
+    
+    if verbose: print([o.mdot for o in system_geometry.orifices])
+
+    return system_geometry
+
 
 def specify_airflow_get_pressure(system_geometry, airflow_SCMM, water_pressure, starting_mdot, air_temp, tol = 0.0001):
     #updated solver which uses method of bisection
@@ -201,18 +233,25 @@ def specify_airflow_get_pressure(system_geometry, airflow_SCMM, water_pressure, 
     
     max_pressure = 1000
     
-    a = water_pressure * 1.01
+    max_height_above_datum = max([o.elevation_above_datum for o in system_geometry.orifices]) - system_geometry.orifices[0].datum
+    pressure_offset = convert.H_m_to_Pa(max_height_above_datum)
+    
+    a = (water_pressure - pressure_offset)
     b = convert.psi_to_Pa(max_pressure)
     
     def f(air_pressure):
-        solved_geo  = downstream_solve(system_geometry, air_pressure, water_pressure, starting_mdot, air_temp)
-        mdot_calc = parse_results(solved_geo).total_mdot()     
+        try:
+            solved_geo  = downstream_solve(system_geometry, air_pressure, water_pressure, starting_mdot, air_temp)
+            mdot_calc = parse_results(solved_geo).total_mdot()     
+        except:
+            mdot_calc = 0
         return mdot_calc - mdot_target
     
     f_a = f(a)
     f_b = f(b)
-    
-    
+
+
+        
     if np.sign(f_a) == np.sign(f_b):
         raise Exception(
          'The scalars a and b do not bound a root. The airflow selected either exceeds that which can be supplied by {} psi, or is so low that the associated pressure is close to that of the water pressure'.format(max_pressure))
@@ -226,17 +265,20 @@ def specify_airflow_get_pressure(system_geometry, airflow_SCMM, water_pressure, 
         m = (a + b)/2
         f_m = f(m)
         
-        print(m)
+        #print(m)
         if np.abs(f_m) < tol:
             return m
         elif np.sign(f_a) == np.sign(f_m):
             #m is an improvement on a
             a = m
             f_a = f(a)
+            #f_a = f_m #? I think this works?
+            
         elif np.sign(f_b) == np.sign(f_m):
             #m is an improvement on b
             b = m
             f_b = f(b)
+            #f_b = f_m #? I think this works
         
         if iterations > max_iterations:
             sys.exit('Max iterations of {} exceeded (In specify airflow get pressure routine)'.format(max_iterations))
@@ -244,7 +286,7 @@ def specify_airflow_get_pressure(system_geometry, airflow_SCMM, water_pressure, 
 
 def main():
     
-    manifold = generate_equal_spaced_uniform(segment_length=100, 
+    manifold = generate_equal_spaced_uniform(segment_length=200, 
                                   pipe_roughness=0.000025,
                                   pipe_diameter= 0.0762009266,
                                   number_of_orifices=100,
@@ -267,7 +309,7 @@ def main():
 #                                  connector_roughness =0.000025,
 #                                  connector_diameter = 0.0762009266
 #                                  )
-    
+    manifold = set_orifice_elevations_on_profile(manifold,[[0,00],[200,10]],0)
     manifold = add_supply_line(manifold, 
                                supply_length = 100, 
                                pipe_roughness = 0.000025, 
@@ -276,32 +318,32 @@ def main():
     
     
     
-    air_pressure = 100 #psi
+    air_pressure = 60 #psi
     air_pressure = convert.psi_to_Pa(air_pressure)
     air_pressure = convert.pressure_to_absolute(air_pressure)
     
-    water_depth = 30 #ft
+    water_depth = 100 #ft
     water_depth = convert.ft_to_m(water_depth)
     water_pressure = convert.pressure_to_absolute(convert.H_m_to_Pa(water_depth))
 
     air_temp = 0
         
-    starting_mdot = 1
+    starting_mdot = 0.01
     
-    air_flow_SCMM =30
+    air_flow_SCMM =90
     
     ap = specify_airflow_get_pressure(manifold,air_flow_SCMM, water_pressure, starting_mdot, air_temp)
     
-    geom = downstream_solve(manifold,
-                               air_pressure, 
-                               water_pressure, 
-                               starting_mdot, 
-                               air_temp,
-                               verbose=True)
+#    geom = downstream_solve(manifold,
+#                               air_pressure, 
+#                               water_pressure, 
+#                               starting_mdot, 
+#                               air_temp,
+#                               verbose=True)
+#    
     
     
-    
-    print(sum([orifice.mdot for orifice in geom.orifices]))
+    #print(sum([orifice.mdot for orifice in geom.orifices]))
     
 #    scipy_results = scipy_minimize_solve(manifold, 
 #                                         air_pressure, 

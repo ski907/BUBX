@@ -5,6 +5,8 @@ from geometry import Segment
 import operator
 from functools import reduce
 import itertools
+
+from scipy import interpolate
     
 def generate_equal_spaced_uniform(segment_length: float, 
                                   pipe_roughness: float,
@@ -107,4 +109,40 @@ def add_supply_line(segment: Segment,
     features.insert(0,Pipe(supply_length, pipe_diameter, pipe_roughness))
     
     return Segment(features)
+    
+
+def set_orifice_elevations_on_profile(segment: Segment, profile: list, datum):
+    
+    elevations = []
+    offsets = []
+    
+    for point in profile:
+        offsets.append(point[0])
+        elevations.append(point[1]-datum)
+    
+    offsets.append(offsets[-1] + 0.1) #need to add a little bump to deal with rounding errors
+    elevations.append(elevations[-1])
+    
+    f = interpolate.interp1d(offsets, elevations)
+    
+    diffuser_offset = 0
+    
+    for feature in segment.features:
+        if isinstance(feature, Orifice):
+            feature.elevation_above_datum = float(f(diffuser_offset))
+            feature.datum = datum
+        
+        if isinstance(feature, Pipe):
+            diffuser_offset += feature.length
+            feature.elevation_above_datum = float(f(diffuser_offset))
+            feature.datum = datum
+            
+            
+    features = segment.features        
+    return Segment(features)
+
+
+        
+    
+        
     

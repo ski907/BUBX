@@ -5,6 +5,7 @@ from conversions import convert
 
 from geometry.segments import generate_equal_spaced_uniform
 from geometry.segments import add_supply_line
+from geometry.segments import set_orifice_elevations_on_profile
 
 from solver import downstream_solve
 from solver import specify_airflow_get_pressure
@@ -70,9 +71,21 @@ def uniform_diffuser():
         
         supply_submit_button = st.form_submit_button(label='Update/Run')
     
-    # st.form_submit_button returns True upon form submit
-#    if sg_submit_button:
-#        col1.write(f'Geometry Updated')
+    with col1.form(key='diffuser_elevation_form'):
+        st.write("Diffuser Elevation Profile")
+        profile = st.text_input("Elevation Profile [offset1,elev1],[offset2,elev2],...", f'[0,0],[{convert.m_to_ft(segment_length)},0]')
+        profile = list(eval(profile))
+
+        datum = st.number_input('Datum (ft)',0)
+
+        elevation_submit_button = st.form_submit_button(label='Update/Run')
+        
+        for point in profile:
+            point[0]=convert.ft_to_m(point[0])
+            point[1]=convert.ft_to_m(point[1])
+            
+        datum = convert.ft_to_m(datum)
+        
         
     system_geom = generate_equal_spaced_uniform(segment_length, 
                                   pipe_roughness,
@@ -80,16 +93,21 @@ def uniform_diffuser():
                                   number_of_orifices,
                                   orifice_diameter
                                   )
-    
+        
+    system_geom = set_orifice_elevations_on_profile(system_geom, profile, datum)
+        
     system_geom =  add_supply_line(system_geom,
                                     supply_pipe_length,
                                     supply_pipe_roughness,
                                     supply_pipe_diameter)
+  
+        
+
     
     col3.write('Boundary Conditions')
     bc_method = col3.radio('Specify Boundary Condition Method', ('Pressure Specified','Airflow Specified'))
     
-    starting_mdot = 0.01
+    starting_mdot = 0.0001
     
     if bc_method == 'Pressure Specified':
     
@@ -102,6 +120,8 @@ def uniform_diffuser():
         airflow_SCMM, water_pressure, air_temp = boundary_conditions_specify_airflow(col3)
         
         air_pressure = specify_airflow_get_pressure(system_geom, airflow_SCMM, water_pressure, starting_mdot, air_temp)
+        
+        col3.write(convert.Pa_to_psi(convert.pressure_to_gauge(air_pressure)))
 
 
     solved_geom = downstream_solve(system_geom,
@@ -110,8 +130,9 @@ def uniform_diffuser():
                    starting_mdot, 
                    air_temp,
                    verbose=False)
+ 
+
         
-    #mdot = sum([orifice.mdot for orifice in solved_geom.orifices])
     
     col4.write('Results:')
     mdot = parse_results(solved_geom).total_mdot()

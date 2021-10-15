@@ -63,7 +63,8 @@ class parse_results:
     def coefficient_of_uniformity(self):
         #modified from Haehnel 2016 to go to 1 when perfectly uniform
         #it's just 1- CU from Haehnel
-        return 1 - (self.system_geometry.orifices[0].mdot - self.system_geometry.orifices[-1].mdot)/self.mean_orifice_mass_flow()
+        #return 1 - (self.system_geometry.orifices[0].mdot - self.system_geometry.orifices[-1].mdot)/self.mean_orifice_mass_flow()
+        return 1 - (max([o.mdot for o in self.system_geometry.orifices])-min([o.mdot for o in self.system_geometry.orifices]))/self.mean_orifice_mass_flow()
                
     def mean_orifice_mass_flow(self):
         return np.mean([o.mdot for o in self.system_geometry.orifices])

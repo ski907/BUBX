@@ -12,8 +12,11 @@ class Orifice:
         self.gamma = 1.4
         self.rc = (2/(self.gamma + 1))**(self.gamma/(self.gamma-1))
         self.temp = 0
+        
+        self.elevation_above_datum = 0
+        self.datum = 0
 
-        self.upstream_pressure = 0
+        self.upstream_pressure = 0.000001
         self.downstream_pressure = 0
     
     @property        

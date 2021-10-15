@@ -106,6 +106,7 @@ def plot_orifice_flows(solved_geom,units):
     ydomain = [min(data[flow_label])*.95,max(data[flow_label])*1.05]
     chart = alt.Chart(data).mark_circle(
                 color='red',
+                size=80,
                 opacity=0.8
             ).encode(
             x = alt.X(orifice_label, scale=alt.Scale(domain=xdomain)), 
@@ -139,6 +140,7 @@ def plot_horizontal_velocities(solved_geom,units):
     ydomain = [min(data[vel_label])*.95,max(data[vel_label])*1.05]
     chart = alt.Chart(data).mark_circle(
                 color='red',
+                size=80,
                 opacity=0.8
             ).encode(
             x = alt.X(orifice_label, scale=alt.Scale(domain=xdomain)),
