@@ -120,8 +120,6 @@ def uniform_diffuser():
         airflow_SCMM, water_pressure, air_temp = boundary_conditions_specify_airflow(col3)
         
         air_pressure = specify_airflow_get_pressure(system_geom, airflow_SCMM, water_pressure, starting_mdot, air_temp)
-        
-        col3.write(convert.Pa_to_psi(convert.pressure_to_gauge(air_pressure)))
 
 
     solved_geom = downstream_solve(system_geom,
