@@ -15,7 +15,7 @@ def uniform_diffuser():
     
 
     
-    col1, col2, col3, col4 = st.beta_columns(4)
+    col1, col2, col3, col4 = st.columns(4)
     
     col2.write('Diffuser Geometry')
     

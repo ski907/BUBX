@@ -22,7 +22,7 @@ st.write(plots.plot_orifice_flows(system_geometry,units=orifice_plot_units))
 
 st.write(plots.plot_horizontal_velocities(system_geometry,units=orifice_plot_units))
 
-col4, col5 = st.beta_columns((1,2))
+col4, col5 = st.columns((1,2))
 
 with col4.form(key='Flow Range Plot Parameters'):
     
