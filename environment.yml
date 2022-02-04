@@ -1,5 +1,0 @@
-name: for_st
-
-dependencies:
-  - fluids=1.0.17  
-  - numpy
