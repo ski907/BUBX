@@ -17,9 +17,16 @@ def plot_flow_vs_depth(system_geometry,
                        air_pressures: list,
                        air_temp,
                        units='SI'):
-
+    """
+    Plot air flow vs depth for different air pressures
+    """
     depth_min, depth_max = depth_lims
     depths = np.linspace(*depth_lims)
+    
+    # Debug: Print to check inputs
+    print(f"Debug - Depth range: {depth_min} to {depth_max}")
+    print(f"Debug - Number of air pressures: {len(air_pressures)}")
+    print(f"Debug - Air pressures: {air_pressures[:3] if len(air_pressures) > 3 else air_pressures}...")
     
     if units == 'SI':
         column_names = ['depth (m)', 'air flow (kg/s)', 'air flow (SCMM)', 'air pressure (kPa)']
@@ -27,63 +34,132 @@ def plot_flow_vs_depth(system_geometry,
     elif units == 'English':
         column_names = ['depth (ft)', 'air flow (kg/s)', 'air flow (SCFM)', 'air pressure (psi)']
         pressure_unit = 'psi'
-        
-    source1 = pd.DataFrame(columns = column_names, dtype=object)
-
-    for air_pressure in air_pressures:    
-#        air_flows_mass = [get_just_airflow(system_geometry = system_geometry, 
-#                         air_pressure =  air_pressure, 
-#                         water_pressure = convert.pressure_to_absolute(convert.H_m_to_Pa(depth)),
-#                         starting_mdot= 0.1, 
-#                         air_temp = air_temp) for depth in depths]
-        
-        solved_geometries = [copy.deepcopy(downstream_solve(system_geometry = system_geometry, 
-                     air_pressure =  air_pressure, 
-                     water_pressure = convert.pressure_to_absolute(convert.H_m_to_Pa(depth)),
-                     starting_mdot= 0.1, 
-                     air_temp = air_temp)) for depth in depths]
     
+    # Initialize empty DataFrame with proper dtypes
+    source1 = pd.DataFrame(columns=column_names)
+    
+    # Collect all dataframes first, then concatenate once
+    dataframes_to_concat = []
+    
+    for i, air_pressure in enumerate(air_pressures):
+        print(f"Debug - Processing pressure {i+1}/{len(air_pressures)}: {air_pressure}")
+        
+        # Your existing calculation code
+        solved_geometries = [
+            copy.deepcopy(
+                downstream_solve(
+                    system_geometry=system_geometry,
+                    air_pressure=air_pressure,
+                    water_pressure=convert.pressure_to_absolute(convert.H_m_to_Pa(depth)),
+                    starting_mdot=0.1,
+                    air_temp=air_temp
+                )
+            ) for depth in depths
+        ]
+        
         air_flows_mass = [parse_results(geom).total_mdot() for geom in solved_geometries]
         
         atm_pressure = convert.pressure_to_absolute(0)
-        rho_air = air.rho_air(atm_pressure, T=convert.F_to_C(68)) #68F is Standard Temperature in SCFM in north america
+        rho_air = air.rho_air(atm_pressure, T=convert.F_to_C(68))
         
-        air_flows_volumetric = [convert.CMS_to_CMM(air.Q(mdot,rho_air)) for mdot in air_flows_mass]
+        air_flows_volumetric = [convert.CMS_to_CMM(air.Q(mdot, rho_air)) for mdot in air_flows_mass]
         
+        # Create dataframe for this pressure
         if units == 'SI':
-            source1  = source1.append(pd.DataFrame({
-                    column_names[0]: depths,
-                    column_names[1]: air_flows_mass,
-                    column_names[2]: air_flows_volumetric,
-                    column_names[3]: convert.pressure_to_gauge(air_pressure)/1000
-                    }))    
+            df_temp = pd.DataFrame({
+                column_names[0]: depths,
+                column_names[1]: air_flows_mass,
+                column_names[2]: air_flows_volumetric,
+                column_names[3]: [convert.pressure_to_gauge(air_pressure)/1000] * len(depths)  # Repeat for all depths
+            })
+        elif units == 'English':
+            df_temp = pd.DataFrame({
+                column_names[0]: list(map(convert.m_to_ft, depths)),
+                column_names[1]: air_flows_mass,
+                column_names[2]: list(map(convert.CMM_to_CFM, air_flows_volumetric)),
+                column_names[3]: [convert.Pa_to_psi(convert.pressure_to_gauge(air_pressure))] * len(depths)  # Repeat for all depths
+            })
+        
+        dataframes_to_concat.append(df_temp)
     
-        if units == 'English':
-            source1  = source1.append(pd.DataFrame({
-                    column_names[0]: list(map(convert.m_to_ft,depths)),
-                    column_names[1]: air_flows_mass,
-                    column_names[2]: list(map(convert.CMM_to_CFM,air_flows_volumetric)),
-                    column_names[3]: convert.Pa_to_psi(convert.pressure_to_gauge(air_pressure))
-                    }))             
-                
-    chart = alt.Chart(source1).mark_line().encode(
-            x=column_names[0],
-            y=column_names[2],
-            color=column_names[3]
-            )
+    # Concatenate all dataframes at once
+    if dataframes_to_concat:
+        source1 = pd.concat(dataframes_to_concat, ignore_index=True)
     
-    labels = alt.Chart(source1).mark_text(align='left', dx=0, dy=-15).encode(
-            alt.X(column_names[0], aggregate='mean', axis=alt.Axis(title=column_names[0])),
-            alt.Y(column_names[2], aggregate='mean', axis=alt.Axis(title=column_names[2])),
-            text = 'label:N',
-            color = alt.Color(column_names[3], legend=None, scale=alt.Scale(domain=air_pressures,type='ordinal'))
-            ).transform_calculate(label=f'format(datum["{column_names[3]}"],".0f") + " {pressure_unit}"')
-
+    # Debug: Check the resulting dataframe
+    print(f"Debug - Final dataframe shape: {source1.shape}")
+    print(f"Debug - Columns: {source1.columns.tolist()}")
+    print(f"Debug - First few rows:\n{source1.head()}")
+    print(f"Debug - Data types:\n{source1.dtypes}")
+    print(f"Debug - Unique pressures: {source1[column_names[3]].unique()}")
     
-    return alt.layer(chart, labels).properties(title='Range', height=800, width=1000).configure_axis(
-                    labelFontSize=15,
-                    titleFontSize=20
-                    )
+    # Ensure numeric columns are actually numeric
+    source1[column_names[0]] = pd.to_numeric(source1[column_names[0]], errors='coerce')
+    source1[column_names[1]] = pd.to_numeric(source1[column_names[1]], errors='coerce')
+    source1[column_names[2]] = pd.to_numeric(source1[column_names[2]], errors='coerce')
+    source1[column_names[3]] = pd.to_numeric(source1[column_names[3]], errors='coerce')
+    
+    # Check for NaN values
+    if source1.isnull().any().any():
+        print("Warning: DataFrame contains NaN values!")
+        print(source1.isnull().sum())
+    
+    # Create the base line chart
+    chart = alt.Chart(source1).mark_line(point=True).encode(
+        x=alt.X(column_names[0], title=column_names[0]),
+        y=alt.Y(column_names[2], title=column_names[2]),
+        color=alt.Color(
+            column_names[3],
+            title=f'Air Pressure ({pressure_unit})',
+            scale=alt.Scale(scheme='viridis'),
+            legend=alt.Legend(orient='right')
+        ),
+        tooltip=[
+            alt.Tooltip(column_names[0], format='.2f'),
+            alt.Tooltip(column_names[2], format='.2f'),
+            alt.Tooltip(column_names[3], format='.1f')
+        ]
+    )
+    
+    # Create labels for each pressure line
+    # Group by pressure and get the middle point for label placement
+    label_data = source1.groupby(column_names[3]).agg({
+        column_names[0]: 'median',
+        column_names[2]: 'median'
+    }).reset_index()
+    
+    # Add formatted label column
+    label_data['label'] = label_data[column_names[3]].apply(lambda x: f'{x:.0f} {pressure_unit}')
+    
+    labels = alt.Chart(label_data).mark_text(
+        align='left',
+        dx=5,
+        dy=-5,
+        fontSize=12
+    ).encode(
+        x=column_names[0],
+        y=column_names[2],
+        text='label:N',
+        color=alt.Color(
+            column_names[3],
+            scale=alt.Scale(scheme='viridis'),
+            legend=None
+        )
+    )
+    
+    # Combine chart and labels
+    final_chart = (chart + labels).properties(
+        title='Air Flow vs Water Depth',
+        height=600,
+        width=800
+    ).configure_axis(
+        labelFontSize=12,
+        titleFontSize=14
+    ).configure_title(
+        fontSize=16
+    ).interactive()  # Add interactivity for zooming/panning
+    
+    return final_chart
 
 def plot_orifice_flows(solved_geom,units):
     
@@ -111,7 +187,7 @@ def plot_orifice_flows(solved_geom,units):
             ).encode(
             x = alt.X(orifice_label, scale=alt.Scale(domain=xdomain)), 
             y= alt.Y(flow_label, scale=alt.Scale(domain=ydomain))
-            ).properties(title='Orifice Flows', height=800, width=1000
+            ).properties(title='Orifice Flows', height=800, width=800
             ).configure_axis(
                     labelFontSize=20,
                     titleFontSize=20
@@ -145,7 +221,7 @@ def plot_horizontal_velocities(solved_geom,units):
             ).encode(
             x = alt.X(orifice_label, scale=alt.Scale(domain=xdomain)),
             y= alt.Y(vel_label, scale=alt.Scale(domain=ydomain))
-            ).properties(title='Surface Velocities', height=800, width=1000
+            ).properties(title='Surface Velocities', height=800, width=800
             ).configure_axis(
                     labelFontSize=20,
                     titleFontSize=20
