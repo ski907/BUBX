@@ -3,11 +3,13 @@ import numpy as np
 from conversions import convert
 from uniform_diffuser import *
 import plots
+from pdf_report import generate_pdf_report
+from datetime import datetime
 
 # Page configuration
 st.set_page_config(
     page_title="BUBX - Air Demand Calculator",
-    page_icon="💨",
+    page_icon="🫧",
     layout="wide"
 )
 
@@ -42,11 +44,11 @@ with tab_input:
         pipe_type = st.selectbox(label='Pipe Inner Material (Absolute Roughness)',options=list(pipe_materials.keys()))
         pipe_roughness = pipe_materials[pipe_type]/1000 #mm to meters
         
-        pipe_diameter = st.number_input(label='Pipe Diameter (in)', value=3., format='%1.2f')
-        pipe_diameter = convert.in_to_m(pipe_diameter)
-        
-        segment_length = st.number_input(label='Segment Length (ft)', value=100)
-        segment_length = convert.ft_to_m(segment_length)
+        pipe_diameter_in = st.number_input(label='Pipe Diameter (in)', value=3., format='%1.2f')
+        pipe_diameter = convert.in_to_m(pipe_diameter_in)
+
+        segment_length_ft = st.number_input(label='Segment Length (ft)', value=100)
+        segment_length = convert.ft_to_m(segment_length_ft)
         
 
         
@@ -60,8 +62,8 @@ with tab_input:
             number_of_orifices = int(segment_length/convert.ft_to_m(spacing))+1
             st.write('Number of Orifices = {}'.format(number_of_orifices))
         
-        orifice_diameter = st.number_input(label='Orifice Diameter (in)', value=5/8, format='%1.4f')
-        orifice_diameter = convert.in_to_m(orifice_diameter)
+        orifice_diameter_in = st.number_input(label='Orifice Diameter (in)', value=5/8, format='%1.4f')
+        orifice_diameter = convert.in_to_m(orifice_diameter_in)
         
         sg_submit_button = st.form_submit_button(label='Update/Run')
    
@@ -71,11 +73,11 @@ with tab_input:
         supply_pipe_type = st.selectbox(label='Supply Pipe Inner Material',options=list(pipe_materials.keys()))
         supply_pipe_roughness = pipe_materials[supply_pipe_type]/1000 #mm to meters
     
-        supply_pipe_diameter = st.number_input(label='Supply Pipe Diameter (in)', value=3., format='%1.2f')
-        supply_pipe_diameter = convert.in_to_m(supply_pipe_diameter)
-    
-        supply_pipe_length = st.number_input(label='Supply Pipe Length (ft)', value=100)
-        supply_pipe_length = convert.ft_to_m(supply_pipe_length)
+        supply_pipe_diameter_in = st.number_input(label='Supply Pipe Diameter (in)', value=3., format='%1.2f')
+        supply_pipe_diameter = convert.in_to_m(supply_pipe_diameter_in)
+
+        supply_pipe_length_ft = st.number_input(label='Supply Pipe Length (ft)', value=100)
+        supply_pipe_length = convert.ft_to_m(supply_pipe_length_ft)
         
         supply_submit_button = st.form_submit_button(label='Update/Run')
     
@@ -131,74 +133,184 @@ with tab_input:
 
 
     solved_geom = downstream_solve(system_geometry,
-                   air_pressure, 
-                   water_pressure, 
-                   starting_mdot, 
+                   air_pressure,
+                   water_pressure,
+                   starting_mdot,
                    air_temp,
                    verbose=False)
 
- 
+    report_inputs = {
+        'pipe_type': pipe_type,
+        'pipe_diameter_in': pipe_diameter_in,
+        'segment_length_ft': segment_length_ft,
+        'number_of_orifices': number_of_orifices,
+        'orifice_diameter_in': orifice_diameter_in,
+        'supply_pipe_type': supply_pipe_type,
+        'supply_pipe_diameter_in': supply_pipe_diameter_in,
+        'supply_pipe_length_ft': supply_pipe_length_ft,
+        'bc_method': bc_method,
+        'water_depth_ft': convert.m_to_ft(convert.Pa_to_H_m(convert.pressure_to_gauge(water_pressure))),
+    }
+
 with tab_results:
-
-    st.write('Results:')
-    mdot = parse_results(solved_geom).total_mdot()
+    st.header('Results')
     
+    # Calculate base values once
+    results = parse_results(solved_geom)
+    mdot = results.total_mdot()
     atm_pressure = convert.pressure_to_absolute(0)
-    rho_air = air.rho_air(atm_pressure, T=convert.F_to_C(68)) #68F is Standard Temperature in SCFM in north america
     
-    st.write('Total Flow Rate (SI): {:.2f} SCMM @1atm and 20C'.format(convert.CMS_to_CMM(air.Q(mdot,rho_air))))
+    # Standard conditions for different regions
+    rho_air_68f = air.rho_air(atm_pressure, T=convert.F_to_C(68))  # 68F - North American standard
+    rho_air_0c = air.rho_air(atm_pressure, T=0)  # 0C - BUB300 standard
     
-    st.write('Total Flow Rate (IMP): {:,.2f} SCFM @1atm and 68F'.format(convert.CFS_to_CFM(convert.CMS_to_CFS(air.Q(mdot,rho_air)))))
+    # Main Results Table
+    st.subheader('Flow Rates & System Parameters')
     
-    st.write('Air Pressure: {:,.2f} psi'.format(convert.Pa_to_psi(convert.pressure_to_gauge(air_pressure))))
-
-    st.write('Airflow Per Unit Length: {:,.2f} SCMM/m'.format(parse_results(solved_geom).airflow_per_unit_length()))
+    # Calculate all values
+    flow_rate_si = convert.CMS_to_CMM(air.Q(mdot, rho_air_68f))
+    flow_rate_imp = convert.CFS_to_CFM(convert.CMS_to_CFS(air.Q(mdot, rho_air_68f)))
+    air_pressure_psi = convert.Pa_to_psi(convert.pressure_to_gauge(air_pressure))
+    airflow_per_length = results.airflow_per_unit_length()
+    airflow_per_length_imp = convert.CMM_to_CFM(airflow_per_length)
+    surface_vel_cms = results.horizontal_surface_vel_haehnel2016()
+    surface_vel_fts = convert.m_to_ft(surface_vel_cms)
     
-    st.write('Estimated Horizontal Surface Velocity (Haehnel 2016): {:,.2f} cm/s'.format(parse_results(solved_geom).horizontal_surface_vel_haehnel2016()))
-    st.write('Estimated Horizontal Surface Velocity (Haehnel 2016): {:,.2f} ft/s'.format(convert.m_to_ft(parse_results(solved_geom).horizontal_surface_vel_haehnel2016())))
+    # Create results table
+    import pandas as pd
+    results_data = {
+        'Parameter': [
+            'Total Flow Rate',
+            'Air Pressure', 
+            'Airflow Per Unit Length',
+            'Surface Velocity (Haehnel 2016)'
+        ],
+        'SI Units': [
+            f'{flow_rate_si:.2f} SCMM @ 1atm, 20°C',
+            f'{convert.pressure_to_gauge(air_pressure)/1000000:,.2f} MPa',
+            f'{airflow_per_length:,.2f} SCMM/m',
+            f'{surface_vel_cms:,.2f} m/s'
+        ],
+        'Imperial Units': [
+            f'{flow_rate_imp:,.2f} SCFM @ 1atm, 68°F',
+            f'{air_pressure_psi:,.2f} psi',
+            f'{airflow_per_length_imp:,.2f} SCFM/m', 
+            f'{surface_vel_fts:,.2f} ft/s'
+        ]
+    }
     
-    coeff_uniformity = parse_results(solved_geom).coefficient_of_uniformity()
-    st.write('Coefficient of Uniformity: {:,.2f}'.format(coeff_uniformity))
+    df_results = pd.DataFrame(results_data)
+    st.dataframe(df_results, use_container_width=True, hide_index=True)
     
+    # Performance Metrics Table
+    st.subheader('Performance Metrics')
+    
+    coeff_uniformity = results.coefficient_of_uniformity()
+    orifice_diffuser_ratio = results.orifice_to_diffuser_area_ratio()
+    
+    # Create performance table
+    performance_data = {
+        'Metric': [
+            'Coefficient of Uniformity',
+            'Orifice/Diffuser Area Ratio'
+        ],
+        'Value': [
+            f'{coeff_uniformity:.3f}',
+            f'{orifice_diffuser_ratio:.3f}'
+        ],
+        'Target': [
+            '> 0.9',
+            '≤ 0.25'
+        ],
+        'Status': [
+            '✅ OK' if coeff_uniformity >= 0.9 else '⚠️ Warning',
+            '✅ OK' if orifice_diffuser_ratio <= 0.25 else '⚠️ Warning'
+        ]
+    }
+    
+    df_performance = pd.DataFrame(performance_data)
+    st.dataframe(df_performance, use_container_width=True, hide_index=True)
+    
+    # Show warnings below table
     if coeff_uniformity < 0.9:
-        st.write('Warning: Coefficient of Uniformity should be greater than 0.9. Imbalance in air screen perfomance likely')
-    
-    orifice_diffuser_ratio = parse_results(solved_geom).orifice_to_diffuser_area_ratio()
-    st.write('Ratio of Total Orifice Area to Diffuser Area: {:,.2f}'.format(orifice_diffuser_ratio))
+        st.warning("Coefficient of Uniformity should be > 0.9. Air screen imbalance likely.")
     
     if orifice_diffuser_ratio > 0.25:
-        st.write('Warning: Ratio Execeeds Recommended Value of 0.25. Increase Diffuser Size, or Decrease Number/Size of Orifices')
-    
-    show_detailed_output = st.checkbox(label='Show Detailed Output?')
+        st.warning("Ratio exceeds recommended 0.25. Consider increasing diffuser size or reducing orifice count/size.")
+
+    # PDF Export
+    st.divider()
+    if st.button("Generate PDF Report", type="primary"):
+        with st.spinner("Building PDF..."):
+            pdf_bytes = generate_pdf_report(
+                solved_geom, report_inputs, air_pressure, water_pressure, air_temp
+            )
+        st.download_button(
+            label="Download PDF",
+            data=pdf_bytes,
+            file_name=f"BUBX_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+            mime="application/pdf",
+        )
+
+    # Detailed Output Toggle
+    st.divider()
+    show_detailed_output = st.checkbox("Show Detailed Output", help="Display additional technical parameters")
     
     if show_detailed_output:
+        st.subheader('Detailed Technical Output')
         
-        st.write('Total Mass flow rate: {:.2f} kg/s'.format(mdot))
+        # Flow and Pressure Details Table
+        with st.expander("Flow and Pressure Analysis", expanded=True):
+            
+            total_p_drop_psi = convert.Pa_to_psi(results.pipe_total_pressure_drop())
+            pressure_ratio = results.ratio_pressure_drop_to_input()
+            flow_rate_bub300 = convert.CFS_to_CFM(convert.CMS_to_CFS(air.Q(mdot, rho_air_0c)))
+            
+            detailed_data = {
+                'Parameter': [
+                    'Total Mass Flow Rate',
+                    'Total Pipe Pressure Drop', 
+                    'Pressure Drop Ratio',
+                    'Flow Rate (BUB300 Standard)'
+                ],
+                'Value': [
+                    f'{mdot:.2f} kg/s',
+                    f'{total_p_drop_psi:.2f} psi',
+                    f'{pressure_ratio:.3f}',
+                    f'{flow_rate_bub300:,.2f} SCFM'
+                ],
+                'Notes': [
+                    '',
+                    'Total pressure loss through pipe system',
+                    'Total drop / Input pressure',
+                    '@ 1atm and 32°F (BUB300 temp standard)'
+                ]
+            }
+            
+            df_detailed = pd.DataFrame(detailed_data)
+            st.dataframe(df_detailed, use_container_width=True, hide_index=True)
         
-        st.write('Total Pipe Pressure Drop (psi)')
-        total_p_drop = convert.Pa_to_psi(parse_results(solved_geom).pipe_total_pressure_drop())
-        st.write(total_p_drop)
+        # Per-Orifice Analysis
+        with st.expander("Per-Orifice Analysis"):
+            st.write("**Mass Flow Per Orifice (kg/s)**")
+            orifice_flows = results.orifice_mdots()
+            st.dataframe(orifice_flows, use_container_width=True)
         
-        st.write('Ratio of Total Pressure Drop to Input Pressure')
-        st.write(parse_results(solved_geom).ratio_pressure_drop_to_input())
-        
-        rho_air = air.rho_air(atm_pressure, T=0) #0C is Standard Temperature in SCFM in BUB300...
-        st.write('Total Flow Rate (IMP): {:,.2f} SCFM @1atm and 32F (temp used by BUB300)'.format(convert.CFS_to_CFM(convert.CMS_to_CFS(air.Q(mdot,rho_air)))))
-        
-        st.write('Mass Flow Per Orifice (kg/s)')
-        st.write(parse_results(solved_geom).orifice_mdots())
-        
-        st.write('Pipe Segment Velocities (m/s)')
-        st.write(parse_results(solved_geom).pipe_velocities())
-        
-        st.write('Pipe Segment Pressure Drops (psi)')
-        st.write(list(map(convert.Pa_to_psi,parse_results(solved_geom).pipe_pressure_drops())))
-        
-        st.write('Pipe Segment Mach Numbers')
-        st.write(parse_results(solved_geom).pipe_mach_numbers())
-        
-        st.write('Pipe Segment Reynolds Number')
-        st.write(parse_results(solved_geom).pipe_reynolds_numbers())
+        # Pipe Segment Analysis
+        with st.expander("Pipe Segment Analysis"):
+            segment_data = {
+                'Velocities (m/s)': results.pipe_velocities(),
+                'Pressure Drops (psi)': [convert.Pa_to_psi(p) for p in results.pipe_pressure_drops()],
+                'Mach Numbers': results.pipe_mach_numbers(),
+                'Reynolds Numbers': results.pipe_reynolds_numbers()
+            }
+            
+            # Create a more readable table format
+            import pandas as pd
+            df = pd.DataFrame(segment_data)
+            df.index.name = 'Segment'
+            st.dataframe(df, use_container_width=True)
+
 
 with tab_flow_plots:
     st.header("Orifice Flow Analysis")
