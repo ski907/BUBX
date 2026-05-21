@@ -25,8 +25,14 @@ st.markdown("---")
 tab_input, tab_results, tab_flow_plots, tab_flow_range_plots, tab_about = st.tabs(["⚙️ Inputs", "🔢 Results", "📊 Orifice Flow Plots", "📈 Flow Range Analysis", "ℹ️ About"])
 
 with tab_input:
+    run_name = st.text_input(
+        'Run Name (optional)',
+        placeholder='e.g. Lock 3 – Gate 2 – 30 ft depth',
+        help='Label this run so you can identify the PDF report later.'
+    )
+
     col1, col2, col3 = st.columns(3)
-    
+
     col2.write('Diffuser Geometry')
     
     o_spacing_method = col2.radio('Specify Orifice Placement Method', ('Number','Spacing'))
@@ -140,6 +146,7 @@ with tab_input:
                    verbose=False)
 
     report_inputs = {
+        'run_name': run_name,
         'pipe_type': pipe_type,
         'pipe_diameter_in': pipe_diameter_in,
         'segment_length_ft': segment_length_ft,
@@ -172,7 +179,7 @@ with tab_results:
     flow_rate_imp = convert.CFS_to_CFM(convert.CMS_to_CFS(air.Q(mdot, rho_air_68f)))
     air_pressure_psi = convert.Pa_to_psi(convert.pressure_to_gauge(air_pressure))
     airflow_per_length = results.airflow_per_unit_length()
-    airflow_per_length_imp = convert.CMM_to_CFM(airflow_per_length)
+    airflow_per_length_imp = convert.CMM_to_CFM(airflow_per_length) * convert.ft_to_m(1)
     surface_vel_cms = results.horizontal_surface_vel_haehnel2016()
     surface_vel_fts = convert.m_to_ft(surface_vel_cms)
     
@@ -194,7 +201,7 @@ with tab_results:
         'Imperial Units': [
             f'{flow_rate_imp:,.2f} SCFM @ 1atm, 68°F',
             f'{air_pressure_psi:,.2f} psi',
-            f'{airflow_per_length_imp:,.2f} SCFM/m', 
+            f'{airflow_per_length_imp:,.2f} SCFM/ft',
             f'{surface_vel_fts:,.2f} ft/s'
         ]
     }
@@ -245,10 +252,11 @@ with tab_results:
             pdf_bytes = generate_pdf_report(
                 solved_geom, report_inputs, air_pressure, water_pressure, air_temp
             )
+        slug = f"_{run_name.replace(' ', '_')}" if run_name else ""
         st.download_button(
             label="Download PDF",
             data=pdf_bytes,
-            file_name=f"BUBX_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+            file_name=f"BUBX{slug}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
             mime="application/pdf",
         )
 

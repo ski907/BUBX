@@ -98,6 +98,132 @@ def _base_table_style(header_bg=colors.HexColor('#1f4e79')):
     ])
 
 
+def _chart_diffuser_schematic(inputs: dict) -> io.BytesIO:
+    """
+    Draw a dimensioned side-view schematic of the diffuser system.
+    Coordinate system: x = offset along diffuser (ft), y = elevation
+    where y=0 is the diffuser pipe and y=water_depth_ft is the surface.
+    """
+    seg_len    = inputs.get('segment_length_ft', 100.0)
+    n_or       = int(inputs.get('number_of_orifices', 10))
+    or_dia     = inputs.get('orifice_diameter_in', 0.625)
+    pipe_dia   = inputs.get('pipe_diameter_in', 3.0)
+    depth      = inputs.get('water_depth_ft', 30.0)
+    sup_len    = inputs.get('supply_pipe_length_ft', 100.0)
+    sup_dia    = inputs.get('supply_pipe_diameter_in', 3.0)
+    spacing    = seg_len / (n_or - 1) if n_or > 1 else seg_len
+
+    fig, ax = plt.subplots(figsize=(8.5, 3.6))
+    ax.set_aspect('auto')
+    ax.axis('off')
+
+    # ── Water body ───────────────────────────────────────────────────────────
+    x_left  = -seg_len * 0.06
+    x_right =  seg_len * 1.06
+    ax.fill_between([x_left, x_right], [0, 0], [depth, depth],
+                    color='#cce5f6', alpha=0.45, zorder=0)
+    ax.plot([x_left, x_right], [depth, depth],
+            color='#2196F3', linewidth=1.8, zorder=3)
+    ax.text(seg_len / 2, depth + depth * 0.03,
+            'Water Surface', ha='center', va='bottom',
+            fontsize=8, color='#1565C0', style='italic')
+
+    # ── Seabed / bottom hatching ─────────────────────────────────────────────
+    ax.fill_between([x_left, x_right], [-depth * 0.06, -depth * 0.06], [0, 0],
+                    color='#b8a98a', alpha=0.5, zorder=0)
+    ax.plot([x_left, x_right], [0, 0], color='#6d5a3e', linewidth=1, zorder=1)
+
+    # ── Supply line (vertical, entering diffuser at left end) ─────────────────
+    sup_show = min(depth * 0.35, sup_len * 0.12)   # portion visible in frame
+    ax.plot([0, 0], [0, depth * 0.88],
+            color='#444444', linewidth=4.5, solid_capstyle='round', zorder=4)
+    ax.annotate('', xy=(0, depth * 0.88), xytext=(0, depth * 0.95),
+                arrowprops=dict(arrowstyle='->', color='#444444', lw=1.5))
+    ax.text(-seg_len * 0.025, depth * 0.55,
+            f'Supply line\n{sup_dia:.2f}" ø\n{sup_len:.0f} ft',
+            ha='right', va='center', fontsize=7.5, color='#333333',
+            linespacing=1.4)
+
+    # ── Diffuser pipe ────────────────────────────────────────────────────────
+    ax.plot([0, seg_len], [0, 0],
+            color='#222222', linewidth=5.5, solid_capstyle='butt', zorder=4)
+    # Dead-end plug
+    ax.plot([seg_len, seg_len], [-depth * 0.015, depth * 0.015],
+            color='#222222', linewidth=5, solid_capstyle='butt', zorder=5)
+
+    # ── Orifices ─────────────────────────────────────────────────────────────
+    or_h   = depth * 0.10                  # nozzle stub height
+    bub_h  = depth * 0.72                  # max bubble height
+    x_ors  = [i * spacing for i in range(n_or)]
+
+    # Decide how many orifice labels to show (avoid clutter)
+    label_every = max(1, n_or // 6)
+
+    for idx, xo in enumerate(x_ors):
+        # Orifice marker directly on the pipe
+        ax.plot(xo, 0, 'o',
+                color='#e65100', markersize=5, zorder=5)
+
+        # Bubble trail (3 dots rising from the pipe)
+        # First orifice bubbles drift right to clear the supply line
+        bubble_x_offset = spacing * 0.15 if idx == 0 else 0.0
+        for frac in [0.25, 0.50, 0.78]:
+            by = frac * bub_h
+            bx = xo + bubble_x_offset + (frac - 0.5) * spacing * 0.08
+            r  = max(1.5, 6 * frac)
+            ax.plot(bx, by, 'o', color='#90caf9',
+                    markersize=r, alpha=0.55, zorder=2)
+
+    # ── Dimension: water depth (right side) ──────────────────────────────────
+    dx = seg_len * 1.09
+    ax.annotate('', xy=(dx, 0), xytext=(dx, depth),
+                arrowprops=dict(arrowstyle='<->', color='#333333', lw=1.1))
+    ax.text(dx + seg_len * 0.012, depth / 2,
+            f'{depth:.1f} ft\nwater depth',
+            ha='left', va='center', fontsize=7.5, color='#222222',
+            linespacing=1.4)
+
+    # ── Dimension: total diffuser length (below pipe) ─────────────────────────
+    dy1 = -depth * 0.10
+    ax.plot([0, 0], [0, dy1], color='#666666', linewidth=0.7, linestyle='--')
+    ax.plot([seg_len, seg_len], [0, dy1],
+            color='#666666', linewidth=0.7, linestyle='--')
+    ax.annotate('', xy=(0, dy1), xytext=(seg_len, dy1),
+                arrowprops=dict(arrowstyle='<->', color='#333333', lw=1.1))
+    ax.text(seg_len / 2, dy1 - depth * 0.025,
+            f'Diffuser length = {seg_len:.1f} ft   |   '
+            f'Pipe {pipe_dia:.2f}" ø',
+            ha='center', va='top', fontsize=7.5, color='#222222')
+
+    # ── Dimension: orifice spacing (between first two) ───────────────────────
+    if n_or > 1:
+        dy2 = -depth * 0.22
+        x0, x1 = x_ors[0], x_ors[1]
+        ax.plot([x0, x0], [dy1, dy2], color='#888888', linewidth=0.7, linestyle='--')
+        ax.plot([x1, x1], [dy1, dy2], color='#888888', linewidth=0.7, linestyle='--')
+        ax.annotate('', xy=(x0, dy2), xytext=(x1, dy2),
+                    arrowprops=dict(arrowstyle='<->', color='#555555', lw=1.0))
+        ax.text((x0 + x1) / 2, dy2 - depth * 0.025,
+                f'Spacing = {spacing:.1f} ft   |   '
+                f'Orifice {or_dia:.4f}" ø  x{n_or}',
+                ha='center', va='top', fontsize=7.5, color='#444444')
+
+    # ── Axes limits and title ─────────────────────────────────────────────────
+    y_bot = -depth * 0.35
+    y_top =  depth * 1.12
+    ax.set_xlim(x_left - seg_len * 0.12, x_right + seg_len * 0.20)
+    ax.set_ylim(y_bot, y_top)
+    ax.set_title('Diffuser System Schematic  (not to scale)',
+                 fontsize=10, fontweight='bold', pad=4)
+
+    plt.tight_layout(pad=0.4)
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=160, bbox_inches='tight')
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
 def generate_pdf_report(solved_geom, inputs: dict, air_pressure: float,
                         water_pressure: float, air_temp: float) -> bytes:
     """
@@ -137,7 +263,15 @@ def generate_pdf_report(solved_geom, inputs: dict, air_pressure: float,
     story = []
 
     # Header
+    run_name = inputs.get('run_name', '').strip()
     story.append(Paragraph('BUBX Air Demand Calculator', title_style))
+    if run_name:
+        run_name_style = ParagraphStyle(
+            'RunName', parent=styles['Normal'],
+            fontSize=13, textColor=colors.HexColor('#1f4e79'),
+            spaceAfter=3, fontName='Helvetica-Bold',
+        )
+        story.append(Paragraph(run_name, run_name_style))
     story.append(Paragraph(
         f'Summary Report  |  Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}  |  v0.2',
         meta_style,
@@ -157,6 +291,10 @@ def generate_pdf_report(solved_geom, inputs: dict, air_pressure: float,
         ['Diffuser Pipe Diameter', f"{inputs.get('pipe_diameter_in', 0):.2f} in"],
         ['Diffuser Segment Length', f"{inputs.get('segment_length_ft', 0):.1f} ft"],
         ['Number of Orifices', str(inputs.get('number_of_orifices', '-'))],
+        ['Orifice Spacing', (
+            f"{inputs['segment_length_ft'] / (inputs['number_of_orifices'] - 1):.2f} ft"
+            if inputs.get('number_of_orifices', 1) > 1 else '-'
+        )],
         ['Orifice Diameter', f"{inputs.get('orifice_diameter_in', 0):.4f} in"],
         ['Supply Pipe Material', inputs.get('supply_pipe_type', '-')],
         ['Supply Pipe Diameter', f"{inputs.get('supply_pipe_diameter_in', 0):.2f} in"],
@@ -170,6 +308,11 @@ def generate_pdf_report(solved_geom, inputs: dict, air_pressure: float,
     t_inputs = Table(inputs_data, colWidths=[3.0 * inch, 3.5 * inch])
     t_inputs.setStyle(_base_table_style())
     story.append(t_inputs)
+    story.append(Spacer(1, 10))
+
+    # Diffuser schematic
+    story.append(RLImage(_chart_diffuser_schematic(inputs),
+                         width=6.5 * inch, height=2.75 * inch))
     story.append(Spacer(1, 12))
 
     # Flow Results
@@ -190,7 +333,7 @@ def generate_pdf_report(solved_geom, inputs: dict, air_pressure: float,
         ['Parameter', 'SI', 'Imperial'],
         ['Total Flow Rate', f'{flow_si:.2f} SCMM', f'{flow_imp:.2f} SCFM'],
         ['Air Pressure (gauge)', f'{gauge_mpa:.3f} MPa', f'{gauge_psi:.2f} psi'],
-        ['Airflow Per Unit Length', f'{q_per_len:.3f} SCMM/m', f'{convert.CMM_to_CFM(q_per_len):.3f} SCFM/m'],
+        ['Airflow Per Unit Length', f'{q_per_len:.3f} SCMM/m', f'{convert.CMM_to_CFM(q_per_len) * convert.ft_to_m(1):.3f} SCFM/ft'],
         ['Surface Velocity (Haehnel 2016)', f'{vel_ms:.3f} m/s', f'{vel_fts:.3f} ft/s'],
     ]
 
