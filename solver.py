@@ -223,6 +223,17 @@ def downstream_solve(system_geometry, air_pressure, water_pressure, starting_mdo
     return system_geometry
 
 
+def specify_surface_velocity_get_pressure(system_geometry, target_velocity_ms, water_pressure, air_temp, starting_mdot=0.0001):
+    h = convert.Pa_to_H_m(convert.pressure_to_gauge(water_pressure))
+    diffuser_length = sum([p.length for p in system_geometry.pipes[1:]])
+
+    # Invert Haehnel 2016: v = ((351 + 25.47*h)/1000) * Qa^0.4223
+    Qa_target = (target_velocity_ms * 1000 / (351 + 25.47 * h)) ** (1 / 0.4223)
+    total_flow_SCMM = Qa_target * diffuser_length
+
+    return specify_airflow_get_pressure(system_geometry, total_flow_SCMM, water_pressure, starting_mdot, air_temp)
+
+
 def specify_airflow_get_pressure(system_geometry, airflow_SCMM, water_pressure, starting_mdot, air_temp, tol = 0.0001):
     #updated solver which uses method of bisection
     max_iterations = 1000

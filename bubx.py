@@ -121,21 +121,20 @@ with tab_input:
 
     
     col3.write('Boundary Conditions')
-    bc_method = col3.radio('Specify Boundary Condition Method', ('Pressure Specified','Airflow Specified'))
-    
-    starting_mdot = 0.0001
-    
-    if bc_method == 'Pressure Specified':
-    
-        air_pressure, water_pressure, air_temp = boundary_conditions_specify_pressure(col3)
-        
-    
+    bc_method = col3.radio('Specify Boundary Condition Method', ('Pressure Specified', 'Airflow Specified', 'Surface Velocity Specified'))
 
-    
+    starting_mdot = 0.0001
+
+    if bc_method == 'Pressure Specified':
+        air_pressure, water_pressure, air_temp = boundary_conditions_specify_pressure(col3)
+
     if bc_method == 'Airflow Specified':
         airflow_SCMM, water_pressure, air_temp = boundary_conditions_specify_airflow(col3)
-        
         air_pressure = specify_airflow_get_pressure(system_geometry, airflow_SCMM, water_pressure, starting_mdot, air_temp)
+
+    if bc_method == 'Surface Velocity Specified':
+        target_vel_fts, water_pressure, air_temp = boundary_conditions_specify_surface_velocity(col3)
+        air_pressure = specify_surface_velocity_get_pressure(system_geometry, convert.ft_to_m(target_vel_fts), water_pressure, air_temp)
 
 
     solved_geom = downstream_solve(system_geometry,
@@ -157,6 +156,7 @@ with tab_input:
         'supply_pipe_length_ft': supply_pipe_length_ft,
         'bc_method': bc_method,
         'water_depth_ft': convert.m_to_ft(convert.Pa_to_H_m(convert.pressure_to_gauge(water_pressure))),
+        'target_surface_vel_fts': target_vel_fts if bc_method == 'Surface Velocity Specified' else None,
     }
 
 with tab_results:

@@ -301,6 +301,8 @@ def generate_pdf_report(solved_geom, inputs: dict, air_pressure: float,
         ['Supply Pipe Length', f"{inputs.get('supply_pipe_length_ft', 0):.1f} ft"],
         ['Boundary Condition', inputs.get('bc_method', '-')],
         ['Water Depth', f"{inputs.get('water_depth_ft', 0):.1f} ft"],
+        *([['Target Surface Velocity', f"{inputs['target_surface_vel_fts']:.2f} ft/s"]]
+          if inputs.get('target_surface_vel_fts') is not None else []),
         ['Air Pressure (gauge)', f"{gauge_psi:.2f} psi  /  {gauge_mpa:.3f} MPa"],
         ['Air Temperature', f"{air_temp:.0f} °C"],
     ]

@@ -9,6 +9,7 @@ from geometry.segments import set_orifice_elevations_on_profile
 
 from solver import downstream_solve
 from solver import specify_airflow_get_pressure
+from solver import specify_surface_velocity_get_pressure
 from geometry.parse_results import parse_results
 
 def uniform_diffuser():
@@ -105,21 +106,20 @@ def uniform_diffuser():
 
     
     col3.write('Boundary Conditions')
-    bc_method = col3.radio('Specify Boundary Condition Method', ('Pressure Specified','Airflow Specified'))
-    
-    starting_mdot = 0.0001
-    
-    if bc_method == 'Pressure Specified':
-    
-        air_pressure, water_pressure, air_temp = boundary_conditions_specify_pressure(col3)
-        
-    
+    bc_method = col3.radio('Specify Boundary Condition Method', ('Pressure Specified', 'Airflow Specified', 'Surface Velocity Specified'))
 
-    
+    starting_mdot = 0.0001
+
+    if bc_method == 'Pressure Specified':
+        air_pressure, water_pressure, air_temp = boundary_conditions_specify_pressure(col3)
+
     if bc_method == 'Airflow Specified':
         airflow_SCMM, water_pressure, air_temp = boundary_conditions_specify_airflow(col3)
-        
         air_pressure = specify_airflow_get_pressure(system_geom, airflow_SCMM, water_pressure, starting_mdot, air_temp)
+
+    if bc_method == 'Surface Velocity Specified':
+        target_vel_fts, water_pressure, air_temp = boundary_conditions_specify_surface_velocity(col3)
+        air_pressure = specify_surface_velocity_get_pressure(system_geom, convert.ft_to_m(target_vel_fts), water_pressure, air_temp)
 
 
     solved_geom = downstream_solve(system_geom,
@@ -220,19 +220,40 @@ def boundary_conditions_specify_airflow(col):
     with col.form(key='Boundary Conditions'):
         airflow = st.number_input(label='Air Flow Rate (SCFM)', value=1600, format='%d')
         airflow_SCMM = convert.CMS_to_CMM(convert.CFS_to_CMS(convert.CFM_to_CFS(airflow)))
-        
+
         water_depth = st.number_input(label='Water Depth (ft)', value=30.0, format='%1.1f')
         water_depth = convert.ft_to_m(water_depth)
         water_pressure = convert.pressure_to_absolute(convert.H_m_to_Pa(water_depth))
-        
+
         air_temp = st.number_input(label='Air Temp (C)', value=0, format='%d')
-        
+
         #starting_mdot = st.number_input(label='Starting Airflow (kg/s)', value=0.01)
-        
+
         bc_submit_button = st.form_submit_button(label='Update/Run')
-    
+
     # st.form_submit_button returns True upon form submit
     if bc_submit_button:
         col.write(f'Boundary Conditions Updated')
-        
+
     return airflow_SCMM, water_pressure, air_temp
+
+
+def boundary_conditions_specify_surface_velocity(col):
+    with col.form(key='Boundary Conditions'):
+        target_vel_fts = st.number_input(
+            label='Target Surface Velocity (ft/s)', value=0.5, format='%1.2f',
+            help='Desired horizontal surface velocity per Haehnel (2016). The required air pressure will be calculated.'
+        )
+
+        water_depth = st.number_input(label='Water Depth (ft)', value=30.0, format='%1.1f')
+        water_depth = convert.ft_to_m(water_depth)
+        water_pressure = convert.pressure_to_absolute(convert.H_m_to_Pa(water_depth))
+
+        air_temp = st.number_input(label='Air Temp (C)', value=0, format='%d')
+
+        bc_submit_button = st.form_submit_button(label='Update/Run')
+
+    if bc_submit_button:
+        col.write('Boundary Conditions Updated')
+
+    return target_vel_fts, water_pressure, air_temp
